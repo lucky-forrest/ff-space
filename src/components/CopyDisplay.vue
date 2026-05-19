@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import type { CopyResult } from '@/services/aiCopyService';
+import MusicPlayer from '@/components/MusicPlayer.vue';
 import { useToast } from '@/composables/useToast';
 
 const { show: showToast } = useToast();
@@ -10,7 +11,7 @@ const props = defineProps<{
   selectedStyleId?: string;
 }>();
 
-defineEmits<{
+const emit = defineEmits<{
   copyUpdated: [updatedCopy: CopyResult];
   copyCopied: [copy: CopyResult];
 }>();
@@ -33,7 +34,7 @@ watch(() => props.copies, () => {
 
 watch(() => props.selectedStyleId, () => {
   if (props.selectedStyleId) {
-    const index = props.copies.findIndex(c => c.style.toLowerCase().includes(props.selectedStyleId!.toLowerCase()));
+    const index = props.copies.findIndex(c => c.style === props.selectedStyleId);
     if (index !== -1) selectedIndex.value = index;
   }
 });
@@ -43,7 +44,8 @@ const startEditing = () => {
     editedCopy.value = {
       ...currentCopy.value,
       hashtags: [...currentCopy.value.hashtags],
-      musicSuggestions: [...currentCopy.value.musicSuggestions]
+      musicSuggestions: currentCopy.value.musicSuggestions.map(m => ({ ...m })),
+      viralComments: [...currentCopy.value.viralComments]
     };
     isEditing.value = true;
   }
@@ -51,9 +53,9 @@ const startEditing = () => {
 
 const saveEdit = () => {
   if (editedCopy.value) {
-    const updated = [...props.copies];
-    updated[selectedIndex.value] = { ...editedCopy.value };
-    selectedIndex.value = selectedIndex.value;
+    editedCopy.value.musicSuggestions = editedCopy.value.musicSuggestions.map(m => ({ ...m }));
+    editedCopy.value.viralComments = [...editedCopy.value.viralComments];
+    emit('copyUpdated', { ...editedCopy.value });
     isEditing.value = false;
     editedCopy.value = null;
   }
@@ -84,14 +86,40 @@ const editedHashtagsText = computed({
   }
 });
 
-const editedMusicText = computed({
-  get: () => editedCopy.value?.musicSuggestions.join('\n') ?? '',
+const editedViralCommentsText = computed({
+  get: () => editedCopy.value?.viralComments.join('\n') ?? '',
   set: (val: string) => {
     if (editedCopy.value) {
-      editedCopy.value.musicSuggestions = val.split('\n').filter(Boolean);
+      editedCopy.value.viralComments = val.split('\n').filter(Boolean);
     }
   }
 });
+
+const copyViralComment = async (comment: string) => {
+  try {
+    await navigator.clipboard.writeText(comment);
+    showToast('神评已复制', 'success');
+  } catch {
+    showToast('复制失败', 'error');
+  }
+};
+
+const addMusicItem = () => {
+  if (editedCopy.value) {
+    editedCopy.value.musicSuggestions = [
+      ...editedCopy.value.musicSuggestions,
+      { id: crypto.randomUUID(), name: '', startTime: 0, endTime: 15 }
+    ];
+  }
+};
+
+const removeMusicItem = (index: number) => {
+  if (editedCopy.value) {
+    const updated = [...editedCopy.value.musicSuggestions];
+    updated.splice(index, 1);
+    editedCopy.value.musicSuggestions = updated;
+  }
+};
 
 const editedTitle = computed({
   get: () => editedCopy.value?.title ?? '',
@@ -124,9 +152,33 @@ const editedContent = computed({
         </span>
       </div>
 
-      <div class="copy-music">
-        <span class="music-label">BGM</span>
-        <span class="music-names">{{ currentCopy.musicSuggestions.join(' / ') }}</span>
+      <div class="copy-music-section">
+        <div class="music-section-label">🎵 推荐BGM</div>
+        <div class="music-list">
+          <MusicPlayer
+            v-for="music in currentCopy.musicSuggestions"
+            :key="music.id"
+            :music="music"
+          />
+        </div>
+      </div>
+
+      <div class="viral-comments-section">
+        <div class="viral-section-label">🎯 评论区神评</div>
+        <div class="viral-list">
+          <div
+            v-for="(comment, idx) in currentCopy.viralComments"
+            :key="idx"
+            class="viral-item"
+          >
+            <span class="viral-text">{{ comment }}</span>
+            <button class="viral-copy-btn" @click="copyViralComment(comment)" title="复制神评">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0 0 13.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 0 1-.75.75H9a.75.75 0 0 1-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 0 1-2.25 2.25H6.75A2.25 2.25 0 0 1 4.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 0 1 1.927-.184" />
+              </svg>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -145,8 +197,25 @@ const editedContent = computed({
         <input v-model="editedHashtagsText" type="text" class="edit-input" />
       </div>
       <div class="edit-field">
-        <label>BGM（每行一个）</label>
-        <textarea v-model="editedMusicText" class="edit-textarea" rows="2"></textarea>
+        <label>🎵 推荐BGM</label>
+        <div class="edit-music-list">
+          <div v-for="(music, idx) in editedCopy?.musicSuggestions" :key="music.id" class="edit-music-item">
+            <div class="edit-music-row">
+              <input v-model="music.name" placeholder="歌曲名" class="edit-input edit-music-name" />
+              <button class="btn-remove-music" @click="removeMusicItem(idx)" title="移除">✕</button>
+            </div>
+            <div class="edit-time-row">
+              <input v-model.number="music.startTime" type="number" min="0" class="edit-time-input" /> 秒
+              <span class="time-sep">–</span>
+              <input v-model.number="music.endTime" type="number" min="0" class="edit-time-input" /> 秒
+            </div>
+          </div>
+          <button class="btn-add-music" @click="addMusicItem">+ 添加BGM</button>
+        </div>
+      </div>
+      <div class="edit-field">
+        <label>🎯 神评（每行一条）</label>
+        <textarea v-model="editedViralCommentsText" class="edit-textarea" rows="5" placeholder="每行一条神评..."></textarea>
       </div>
       <div class="edit-actions">
         <button class="btn-cancel" @click="cancelEdit">取消</button>
@@ -230,23 +299,168 @@ const editedContent = computed({
   font-weight: 500;
 }
 
-.copy-music {
-  display: flex;
-  gap: 0.5rem;
-  font-size: 0.8rem;
+/* 音乐推荐区域 */
+.copy-music-section {
+  margin-bottom: 0.75rem;
+}
+
+.music-section-label {
+  font-size: 0.75rem;
+  font-weight: 600;
   color: #166534;
-  background: #f0fdf4;
-  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.375rem;
+}
+
+.music-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+/* 神评区域 */
+.viral-comments-section {
+  margin-bottom: 0.75rem;
+}
+
+.viral-section-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #7c3aed;
+  margin-bottom: 0.375rem;
+}
+
+.viral-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.viral-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.625rem;
+  background: #faf5ff;
+  border: 1px solid #ede9fe;
+  border-radius: 0.375rem;
+  transition: border-color 0.15s;
+}
+
+.viral-item:hover {
+  border-color: #c4b5fd;
+}
+
+.viral-text {
+  flex: 1;
+  font-size: 0.8rem;
+  color: #4c1d95;
+  line-height: 1.4;
+}
+
+.viral-copy-btn {
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: #ede9fe;
+  color: #7c3aed;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.viral-copy-btn:hover {
+  background: #c4b5fd;
+}
+
+/* 编辑模式 - 音乐 */
+.edit-music-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.edit-music-item {
+  padding: 0.375rem;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
   border-radius: 0.375rem;
 }
 
-.music-label {
-  font-weight: 600;
+.edit-music-row {
+  display: flex;
+  gap: 0.25rem;
+  align-items: center;
+  margin-bottom: 0.25rem;
+}
+
+.edit-music-name {
+  flex: 1;
+}
+
+.btn-remove-music {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: #fee2e2;
+  color: #dc2626;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  font-size: 0.7rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
 }
 
-.music-names {
-  color: #15803d;
+.btn-remove-music:hover {
+  background: #fecaca;
+}
+
+.edit-time-row {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.7rem;
+  color: #6b7280;
+}
+
+.edit-time-input {
+  width: 52px;
+  padding: 0.2rem 0.3rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.25rem;
+  font-size: 0.7rem;
+  font-family: inherit;
+  text-align: center;
+}
+
+.edit-time-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+
+.time-sep {
+  flex-shrink: 0;
+}
+
+.btn-add-music {
+  padding: 0.25rem 0.5rem;
+  border: 1px dashed #d1d5db;
+  background: white;
+  color: #6b7280;
+  border-radius: 0.25rem;
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-add-music:hover {
+  border-color: #3b82f6;
+  color: #3b82f6;
 }
 
 /* 编辑模式 */

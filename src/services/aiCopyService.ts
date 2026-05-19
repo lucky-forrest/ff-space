@@ -1,12 +1,15 @@
 import type { MediaFile } from '@/components/MediaUploader.vue';
+import type { MusicSuggestion } from '@/types/music';
 import { extractKeyFrames } from '@/services/videoFrameExtractor';
+import { enrichMusicSuggestions } from '@/services/musicSearchService';
 
 export interface CopyResult {
   id: string;
   title: string;
   content: string;
   hashtags: string[];
-  musicSuggestions: string[];
+  musicSuggestions: MusicSuggestion[];
+  viralComments: string[];
   style: string;
   createdAt: Date;
 }
@@ -47,7 +50,7 @@ export class AICopyError extends Error {
 }
 
 const API_BASE = import.meta.env.VITE_API_PROXY_URL || 'https://dashscope.aliyuncs.com';
-const API_MODEL = 'qwen3.6-plus';
+const API_MODEL = import.meta.env.VITE_API_MODEL || 'deepseek-v4-pro';
 
 const ANALYSIS_SYSTEM_PROMPT = `你是一位专业的图片分析专家，擅长从图片中提取关键视觉信息。请分析上传的图片，返回以下信息（JSON 格式）：
 {
@@ -65,14 +68,21 @@ const COPY_SYSTEM_PROMPT = `你是一位精通抖音短视频运营的文案专�
 - 标题：5-15字，抓人眼球，可使用悬念/反差/数字等技巧，可包含 emoji
 - 正文：20-50字，口语化，有互动感，像朋友聊天
 - 话题标签：3-5个，选择当前热门且与内容相关的标签
-- BGM推荐：2-3首，匹配图片情感氛围的抖音热门音乐
+- BGM推荐：2-3首，匹配图片情感氛围的抖音热门音乐，每首指明推荐使用的片段时间（秒）
+- 音乐信息包含上述歌曲名称、开始时间（秒）、结束时间（秒）
+- 神评推荐：生成10条抖音评论区高赞神评，覆盖以下10种风格（每种1条）：引发共鸣、幽默反转、犀利吐槽、神补刀、引发互动、婉约诗意、清新治愈、豪迈热血、碎碎念、深夜EMO
+  每条10-25字，口语化、有网感，让人忍不住点赞
 
 请严格按以下 JSON 格式返回（不要添加额外的 markdown 代码块）：
 {
   "title": "标题文本",
   "content": "正文文案",
   "hashtags": ["#话题1", "#话题2", "#话题3"],
-  "musicSuggestions": ["BGM1", "BGM2"]
+  "musicSuggestions": [
+    { "name": "歌曲名", "startTime": 12, "endTime": 22 },
+    { "name": "歌曲名", "startTime": 0, "endTime": 15 }
+  ],
+  "viralComments": ["共鸣型神评", "反转型神评", "吐槽型神评", "补刀型神评", "互动型神评"]
 }`;
 
 export class AICopyService {
@@ -108,6 +118,36 @@ export class AICopyService {
       name: '励志鼓舞',
       description: '激励人心，正能量',
       sample: '太励志了！加油 💪 #正能量 #励志语录'
+    },
+    {
+      id: 'graceful',
+      name: '婉约朦胧',
+      description: '含蓄留白，古典诗意，以景结情',
+      sample: '此情无计可消除，才下眉头，却上心头 🍂 #古风意境 #温柔文案'
+    },
+    {
+      id: 'fresh',
+      name: '小清新',
+      description: '自然治愈，文艺干净',
+      sample: '阳光正好，微风不燥，一切刚刚好 🌿 #治愈系 #小清新'
+    },
+    {
+      id: 'bold',
+      name: '豪放派',
+      description: '气势磅礴，豪迈洒脱',
+      sample: '仰天大笑出门去，我辈岂是蓬蒿人 ⚡ #豪迈 #江湖气'
+    },
+    {
+      id: 'daily',
+      name: '日常碎碎念',
+      description: '烟火气、vlog感，像朋友闲聊',
+      sample: '今天也是被生活治愈的一天呀 ☕ #日常 #生活碎片'
+    },
+    {
+      id: 'emo',
+      name: '孤独丧',
+      description: 'EMO氛围，颓废但不绝望',
+      sample: '耳机里的音乐是我的整个世界 🎧 #深夜emo #算了'
     }
   ];
 
@@ -125,7 +165,7 @@ export class AICopyService {
   }
 
   private getApiUrl(): string {
-    return `${API_BASE}/compatible-mode/v1/chat/completions`;
+    return `${API_BASE}/v1/chat/completions`;
   }
 
   /**
@@ -340,9 +380,43 @@ ${styleInstruction}`;
       title: typeof parsed.title === 'string' ? parsed.title : '精彩瞬间',
       content: typeof parsed.content === 'string' ? parsed.content : '值得一看的精彩瞬间',
       hashtags: Array.isArray(parsed.hashtags) ? parsed.hashtags as string[] : ['#精彩瞬间'],
-      musicSuggestions: Array.isArray(parsed.musicSuggestions) ? parsed.musicSuggestions as string[] : ['抖音热歌'],
+      musicSuggestions: this.normalizeMusicSuggestions(parsed.musicSuggestions),
+      viralComments: Array.isArray(parsed.viralComments)
+        ? (parsed.viralComments as string[]).slice(0, 10)
+        : ['神评生成中...'],
       style: style.name
     };
+  }
+
+  /**
+   * 标准化音乐推荐数据（向后兼容旧 string[] 格式）
+   */
+  private normalizeMusicSuggestions(raw: unknown): MusicSuggestion[] {
+    if (!Array.isArray(raw)) {
+      return [{ id: crypto.randomUUID(), name: '抖音热歌', startTime: 0, endTime: 15 }];
+    }
+
+    return raw.map((item: unknown, index: number): MusicSuggestion => {
+      // 旧格式：纯字符串 "晴天"
+      if (typeof item === 'string') {
+        return { id: crypto.randomUUID(), name: item, startTime: 0, endTime: 15 };
+      }
+
+      // 新格式：{ name, startTime, endTime }
+      if (typeof item === 'object' && item !== null) {
+        const obj = item as Record<string, unknown>;
+        const startTime = typeof obj.startTime === 'number' ? Math.max(0, obj.startTime) : 0;
+        return {
+          id: crypto.randomUUID(),
+          name: typeof obj.name === 'string' ? obj.name : `歌曲${index + 1}`,
+          startTime: startTime,
+          endTime: typeof obj.endTime === 'number' ? Math.max(startTime + 1, obj.endTime) : 15,
+        };
+      }
+
+      // 兜底
+      return { id: crypto.randomUUID(), name: `歌曲${index + 1}`, startTime: 0, endTime: 15 };
+    });
   }
 
   /**
@@ -365,6 +439,14 @@ ${styleInstruction}`;
     const results = await Promise.all(
       stylesToUse.map(async (style) => {
         const copy = await this.generateCopyWithClaude(analysis, style);
+
+        // 异步搜索填充音乐URL（失败不影响文案生成）
+        try {
+          copy.musicSuggestions = await enrichMusicSuggestions(copy.musicSuggestions);
+        } catch {
+          console.warn('音乐搜索填充失败，将使用纯文本推荐');
+        }
+
         return {
           ...copy,
           id: Math.random().toString(36).substring(2, 11),

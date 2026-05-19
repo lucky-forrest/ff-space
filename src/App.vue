@@ -168,7 +168,7 @@ const handleCopyCopied = (copy: CopyResult) => {
             <button
               v-for="(copy, index) in generatedCopies"
               :key="copy.id"
-              :class="['style-tab', { active: index === 0 }]"
+              :class="['style-tab', { active: copy.style === selectedStyleId || (!selectedStyleId && index === 0) }]"
               @click="selectedStyleId = copy.style"
             >
               {{ copy.style }}
