@@ -245,20 +245,23 @@ const editedContent = computed({
 .copy-display {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  flex: 1;
+  min-height: 0;
 }
 
 .empty-copy {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 100%;
+  flex: 1;
+  min-height: 0;
   color: #9ca3af;
   font-size: 0.875rem;
 }
 
 .view-mode {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 0.75rem;
 }
@@ -358,8 +361,10 @@ const editedContent = computed({
 }
 
 .viral-copy-btn {
-  width: 26px;
-  height: 26px;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
   border: none;
   background: #ede9fe;
   color: #7c3aed;
@@ -466,6 +471,7 @@ const editedContent = computed({
 /* 编辑模式 */
 .edit-mode {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 0.75rem;
 }
@@ -556,19 +562,25 @@ const editedContent = computed({
   padding: 0.5rem 0.75rem;
   border-top: 1px solid #f3f4f6;
   flex-shrink: 0;
+  flex-wrap: nowrap;
 }
 
 .btn-icon,
 .btn-copy {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 0.375rem;
-  padding: 0.375rem 0.75rem;
+  padding: 0.5rem 0.75rem;
   border-radius: 0.375rem;
   font-size: 0.8rem;
   cursor: pointer;
   border: none;
   transition: background 0.2s;
+  min-height: 44px;
+  white-space: nowrap;
+  flex: 1;
+  max-width: 50%;
 }
 
 .btn-icon {

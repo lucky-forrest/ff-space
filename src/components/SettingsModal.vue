@@ -85,7 +85,7 @@ function selectModel(model: string) {
   showDropdown.value = false
 }
 
-function clearField(field: 'apiProxyUrl' | 'apiKey') {
+function clearField(field: 'apiProxyUrl' | 'apiKey' | 'apiModel') {
   form[field] = ''
 }
 
@@ -168,6 +168,13 @@ const handleSave = () => {
                 @input="showDropdown = true"
                 @blur="scheduleHide"
               />
+              <button
+                v-if="form.apiModel"
+                type="button"
+                class="combo-clear"
+                @click="clearField('apiModel')"
+                title="清除模型"
+              >&times;</button>
               <button
                 type="button"
                 class="combo-arrow"
@@ -276,6 +283,10 @@ const handleSave = () => {
 
 .modal-body {
   padding: 1.25rem;
+  max-height: 70vh;
+  max-height: 70dvh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .modal-desc {
@@ -383,6 +394,27 @@ const handleSave = () => {
   border-bottom-right-radius: 0;
 }
 
+.combo-clear {
+  width: 24px;
+  min-width: 24px;
+  border: 1px solid #e5e7eb;
+  border-left: none;
+  background: #f9fafb;
+  color: #9ca3af;
+  font-size: 0.875rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  line-height: 1;
+}
+
+.combo-clear:hover {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
 .combo-arrow {
   padding: 0 0.625rem;
   border: 1px solid #e5e7eb;
@@ -396,6 +428,10 @@ const handleSave = () => {
 
 .combo-arrow:hover {
   background: #f3f4f6;
+}
+
+.combo-input-row:has(.combo-clear) .combo-arrow {
+  border-radius: 0;
 }
 
 .combo-dropdown {

@@ -7,6 +7,7 @@ import AICopyService, { type CopyResult, type AICopyError } from '@/services/aiC
 import SettingsModal from '@/components/SettingsModal.vue';
 
 const mediaFiles = ref<MediaFile[]>([]);
+const mediaUploaderRef = ref<InstanceType<typeof MediaUploader>>();
 const generatedCopies = ref<CopyResult[]>([]);
 const isLoading = ref(false);
 const loadingStep = ref('');
@@ -17,23 +18,13 @@ const showSettings = ref(false);
 
 const aiService = AICopyService;
 
-const imageCount = ref(0);
-const videoCount = ref(0);
-
-const updateFileCounts = () => {
-  imageCount.value = mediaFiles.value.filter((f: MediaFile) => f.type === 'image').length;
-  videoCount.value = mediaFiles.value.filter((f: MediaFile) => f.type === 'video').length;
-};
-
 const handleFilesSelected = (files: MediaFile[]) => {
   mediaFiles.value = [...mediaFiles.value, ...files];
-  updateFileCounts();
 };
 
 const handleFilesRemoved = (files: MediaFile[]) => {
   const removedIds = files.map(f => f.id);
   mediaFiles.value = mediaFiles.value.filter(f => !removedIds.includes(f.id));
-  updateFileCounts();
 
   if (mediaFiles.value.length === 0) {
     generatedCopies.value = [];
@@ -132,9 +123,19 @@ const handleCopyCopied = (copy: CopyResult) => {
     <main class="main-content">
       <!-- 左侧：上传区 -->
       <section class="panel upload-panel">
-        <h2 class="panel-title">上传素材</h2>
+        <div class="panel-title-row">
+          <h2 class="panel-title">上传素材 ({{ mediaFiles.length }}/10)</h2>
+          <button
+            v-if="mediaFiles.length > 0"
+            class="btn-remove-all"
+            @click="mediaUploaderRef?.removeAllFiles()"
+          >
+            全部移除
+          </button>
+        </div>
         <div class="upload-scroll">
           <MediaUploader
+            ref="mediaUploaderRef"
             :max-size="10"
             :max-files="10"
             accept="image/*,video/*"
@@ -143,19 +144,18 @@ const handleCopyCopied = (copy: CopyResult) => {
           />
         </div>
 
-        <div v-if="mediaFiles.length > 0" class="file-info-bar">
-          <span>📷 {{ imageCount }} 张图片</span>
-          <span v-if="videoCount > 0">· 🎬 {{ videoCount }} 个视频</span>
-        </div>
-
         <div v-if="mediaFiles.length > 0" class="generate-bar">
           <button
             :disabled="isLoading"
             class="generate-btn"
+            :class="{ loading: isLoading }"
             @click="generateCopyForFiles"
           >
             <span v-if="!isLoading">✨ 生成文案</span>
-            <span v-else>{{ loadingStep || '生成中...' }}</span>
+            <span v-else class="loading-content">
+              <span class="spinner"></span>
+              {{ loadingStep || '生成中...' }}
+            </span>
           </button>
         </div>
 
@@ -174,25 +174,29 @@ const handleCopyCopied = (copy: CopyResult) => {
         <template v-if="generatedCopies.length > 0">
           <!-- 风格切换标签 -->
           <div class="style-tabs">
-            <button
-              v-for="(copy, index) in generatedCopies"
-              :key="copy.id"
-              :class="['style-tab', { active: copy.style === selectedStyleId || (!selectedStyleId && index === 0) }]"
-              @click="selectedStyleId = copy.style"
-            >
-              {{ copy.style }}
-            </button>
-            <div class="regenerate-row">
-              <button
-                v-for="style in aiService.getStyles()"
-                :key="style.id"
-                class="regenerate-mini"
-                @click="regenerateStyle(style.id)"
-                :disabled="isLoading"
-                title="重新生成"
-              >
-                🔄 {{ style.name }}
-              </button>
+            <div class="style-tabs-inner">
+              <div class="style-tab-row">
+                <button
+                  v-for="(copy, index) in generatedCopies"
+                  :key="copy.id"
+                  :class="['style-tab', { active: copy.style === selectedStyleId || (!selectedStyleId && index === 0) }]"
+                  @click="selectedStyleId = copy.style"
+                >
+                  {{ copy.style }}
+                </button>
+              </div>
+              <div class="regenerate-row">
+                <button
+                  v-for="style in aiService.getStyles()"
+                  :key="style.id"
+                  class="regenerate-mini"
+                  @click="regenerateStyle(style.id)"
+                  :disabled="isLoading"
+                  title="重新生成"
+                >
+                  🔄 {{ style.name }}
+                </button>
+              </div>
             </div>
           </div>
 
@@ -235,6 +239,7 @@ const handleCopyCopied = (copy: CopyResult) => {
 
 html, body, #app {
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background: #f5f7fa;
@@ -246,6 +251,7 @@ html, body, #app {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh;
 }
 
 .app-header {
@@ -261,6 +267,16 @@ html, body, #app {
 .app-header h1 {
   font-size: 1.125rem;
   font-weight: 600;
+}
+
+@media (max-width: 400px) {
+  .app-header h1 {
+    font-size: 0.875rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 0 1 auto;
+  }
 }
 
 .settings-btn {
@@ -308,28 +324,40 @@ html, body, #app {
   min-width: 0;
 }
 
+.panel-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #f3f4f6;
+  flex-shrink: 0;
+}
+
 .panel-title {
   font-size: 0.875rem;
   font-weight: 600;
   color: #374151;
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid #f3f4f6;
-  flex-shrink: 0;
+}
+
+.btn-remove-all {
+  color: #dc2626;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  white-space: nowrap;
+}
+
+.btn-remove-all:hover {
+  background-color: #fee2e2;
 }
 
 .upload-scroll {
   flex: 1;
   overflow-y: auto;
   padding: 0.75rem;
-}
-
-.file-info-bar {
-  padding: 0.5rem 1rem;
-  font-size: 0.75rem;
-  color: #0369a1;
-  background: #f0f9ff;
-  border-top: 1px solid #e0f2fe;
-  flex-shrink: 0;
 }
 
 .generate-bar {
@@ -357,6 +385,31 @@ html, body, #app {
 .generate-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.generate-btn.loading {
+  opacity: 0.85;
+}
+
+.loading-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.spinner {
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .error-inline {
@@ -402,15 +455,35 @@ html, body, #app {
 
 /* 右侧：风格标签 */
 .style-tabs {
-  padding: 0.5rem 1rem 0;
+  padding: 0.5rem 0.75rem 0;
   border-bottom: 1px solid #f3f4f6;
+  flex-shrink: 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.style-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.style-tabs-inner {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  white-space: nowrap;
+  padding-bottom: 0.5rem;
+}
+
+.style-tab-row {
+  display: inline-flex;
+  gap: 0.375rem;
+  white-space: nowrap;
   flex-shrink: 0;
 }
 
 .style-tab {
   padding: 0.375rem 0.75rem;
-  margin-right: 0.375rem;
-  margin-bottom: 0.375rem;
   border: 1px solid #e5e7eb;
   border-radius: 9999px;
   background: #f9fafb;
@@ -418,6 +491,8 @@ html, body, #app {
   font-size: 0.75rem;
   cursor: pointer;
   transition: all 0.2s;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .style-tab:hover {
@@ -431,14 +506,14 @@ html, body, #app {
 }
 
 .regenerate-row {
-  display: flex;
+  display: inline-flex;
   gap: 0.375rem;
-  flex-wrap: wrap;
-  padding-bottom: 0.5rem;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .regenerate-mini {
-  padding: 0.2rem 0.5rem;
+  padding: 0.25rem 0.5rem;
   border: 1px solid #e5e7eb;
   border-radius: 0.25rem;
   background: white;
@@ -446,6 +521,9 @@ html, body, #app {
   font-size: 0.7rem;
   cursor: pointer;
   transition: all 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+  min-height: 32px;
 }
 
 .regenerate-mini:hover:not(:disabled) {
@@ -459,7 +537,9 @@ html, body, #app {
 
 .copy-area {
   flex: 1;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   padding: 0.75rem 1rem;
 }
 
@@ -489,12 +569,14 @@ html, body, #app {
   .upload-panel {
     width: 100%;
     max-height: 45vh;
+    max-height: 45dvh;
     border-right: none;
     border-bottom: 1px solid #e5e7eb;
   }
 
   .display-panel {
     min-height: 55vh;
+    min-height: 55dvh;
   }
 }
 </style>

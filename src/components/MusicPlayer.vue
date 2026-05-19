@@ -28,6 +28,8 @@ function formatTime(s: number): string {
   return `${min}:${String(remain).padStart(2, '0')}`;
 }
 
+const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+
 function togglePlay() {
   if (isPlaying.value) {
     stopPlayback();
@@ -38,12 +40,19 @@ function togglePlay() {
 
 function startPlayback() {
   if (props.music.videoId) {
-    // 通过 :key 强制重建 iframe，确保 start/end 参数生效
+    if (isMobile) {
+      // 移动端无法自动播放 YouTube 嵌入 iframe，直接跳转打开
+      window.open(
+        `https://youtu.be/${props.music.videoId}?t=${Math.floor(props.music.startTime)}`,
+        '_blank'
+      );
+      return;
+    }
+    // 桌面端：通过 :key 强制重建 iframe，确保 start/end 参数生效
     iframeKey.value++;
     showIframe.value = true;
     isPlaying.value = true;
   } else if (props.music.audioUrl) {
-    // 旧版 audio 兼容
     const audio = new Audio(props.music.audioUrl);
     audio.currentTime = props.music.startTime;
     audio.play().catch(() => {});
@@ -126,10 +135,11 @@ async function copyYouTubeLink() {
       <button
         v-if="hasPlayable"
         class="btn-play"
-        :title="isPlaying ? '暂停' : '播放'"
+        :title="isMobile ? '在 YouTube 中打开' : (isPlaying ? '暂停' : '播放')"
         @click="togglePlay"
       >
-        {{ isPlaying ? '⏸' : '▶️' }}
+        <template v-if="isMobile">🔗</template>
+        <template v-else>{{ isPlaying ? '⏸' : '▶️' }}</template>
       </button>
       <button
         v-if="music.videoId"
@@ -231,8 +241,10 @@ async function copyYouTubeLink() {
 
 .btn-play,
 .btn-copy-url {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
   border: none;
   border-radius: 0.25rem;
   background: #10b981;
@@ -245,6 +257,7 @@ async function copyYouTubeLink() {
   transition: background 0.15s;
   padding: 0;
   line-height: 1;
+  flex-shrink: 0;
 }
 
 .btn-play:hover {

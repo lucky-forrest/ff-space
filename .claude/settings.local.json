@@ -20,7 +20,8 @@
       "Bash(C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\\\\bin\\\\keytool *)",
       "Bash(where java *)",
       "Read(//c/Program Files/**)",
-      "Bash(export PATH=\"$JAVA_HOME/bin:$PATH\")"
+      "Bash(export PATH=\"$JAVA_HOME/bin:$PATH\")",
+      "Bash(npx vue-tsc *)"
     ]
   }
 }

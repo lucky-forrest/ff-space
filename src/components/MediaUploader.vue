@@ -134,26 +134,74 @@ const removeAllFiles = () => {
   mediaFiles.value = [];
   emit('filesRemoved', removedFiles);
 };
+
+defineExpose({ removeAllFiles });
 </script>
 
 <template>
-  <div class="media-uploader">
-    <!-- 上传区域 -->
-    <div
-      class="upload-area"
-      :class="{ 'drag-over': dragOver }"
-      @dragover.prevent="dragOver = true"
-      @dragleave="dragOver = false"
-      @drop="handleDrop"
-    >
-      <div class="upload-content">
-        <div class="upload-icon">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-12 h-12">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
-          </svg>
+  <div class="media-uploader" @dragover.prevent="dragOver = true" @dragleave="dragOver = false" @drop="handleDrop">
+    <!-- 错误信息 -->
+    <div v-if="error" class="error-message">
+      {{ error }}
+    </div>
+
+    <!-- 文件网格 -->
+    <div class="files-grid">
+      <div
+        v-for="file in mediaFiles"
+        :key="file.id"
+        class="file-item"
+      >
+        <div class="file-preview">
+          <img
+            v-if="file.type === 'image'"
+            :src="file.previewUrl"
+            :alt="file.name"
+            @error="(e) => {
+              const target = e.target as HTMLImageElement;
+              target.src = '/assets/placeholder-image.svg';
+            }"
+          />
+          <video
+            v-else
+            :src="file.previewUrl"
+            controls
+            @error="(e) => {
+              const target = e.target as HTMLVideoElement;
+              target.parentElement!.innerHTML = '<div class=\'video-placeholder\'>视频预览不可用</div>';
+            }"
+          />
         </div>
-        <p class="upload-text">拖拽文件到此处或点击上传</p>
-        <p class="upload-hint">支持图片和视频格式，最大{{ maxSize || 10 }}MB</p>
+        <div class="file-info">
+          <div class="file-name">{{ file.name }}</div>
+          <div class="file-size">{{ formatFileSize(file.size) }}</div>
+        </div>
+        <button
+          type="button"
+          class="remove-btn"
+          @click="removeFile(file.id)"
+          :aria-label="`移除 ${file.name}`"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <!-- 上传卡片 -->
+      <div
+        v-if="mediaFiles.length < maxFilesCount"
+        class="file-item upload-card"
+        :class="{ 'drag-over': dragOver }"
+      >
+        <div class="upload-card-content">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-8 h-8">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+          </svg>
+          <span class="upload-card-text">
+           请点击或拖拽上传
+          </span>
+        </div>
         <input
           type="file"
           class="file-input"
@@ -161,75 +209,6 @@ const removeAllFiles = () => {
           :multiple="maxFiles !== 1"
           @change="handleFileInput"
         />
-        <button
-          type="button"
-          class="upload-btn primary"
-          @click="$el.querySelector('.file-input')?.click()"
-        >
-          选择文件
-        </button>
-      </div>
-    </div>
-
-    <!-- 错误信息 -->
-    <div v-if="error" class="error-message">
-      {{ error }}
-    </div>
-
-    <!-- 已选文件列表 -->
-    <div v-if="mediaFiles.length > 0" class="selected-files">
-      <div class="files-header">
-        <h3>已选择的文件 ({{ mediaFiles.length }}/{{ maxFilesCount }})</h3>
-        <button
-          type="button"
-          class="btn-remove-all"
-          @click="removeAllFiles"
-        >
-          全部移除
-        </button>
-      </div>
-
-      <div class="files-grid">
-        <div
-          v-for="file in mediaFiles"
-          :key="file.id"
-          class="file-item"
-        >
-          <div class="file-preview">
-            <img
-              v-if="file.type === 'image'"
-              :src="file.previewUrl"
-              :alt="file.name"
-              @error="(e) => {
-                const target = e.target as HTMLImageElement;
-                target.src = '/assets/placeholder-image.svg';
-              }"
-            />
-            <video
-              v-else
-              :src="file.previewUrl"
-              controls
-              @error="(e) => {
-                const target = e.target as HTMLVideoElement;
-                target.parentElement!.innerHTML = '<div class=\'video-placeholder\'>视频预览不可用</div>';
-              }"
-            />
-          </div>
-          <div class="file-info">
-            <div class="file-name">{{ file.name }}</div>
-            <div class="file-size">{{ formatFileSize(file.size) }}</div>
-          </div>
-          <button
-            type="button"
-            class="remove-btn"
-            @click="removeFile(file.id)"
-            :aria-label="`移除 ${file.name}`"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
       </div>
     </div>
   </div>
@@ -240,110 +219,13 @@ const removeAllFiles = () => {
   width: 100%;
 }
 
-.upload-area {
-  border: 2px dashed #d1d5db;
-  border-radius: 0.5rem;
-  padding: 2rem;
-  text-align: center;
-  transition: all 0.2s ease-in-out;
-  background-color: #f9fafb;
-  position: relative;
-}
-
-.upload-area.drag-over {
-  border-color: #3b82f6;
-  background-color: #dbeafe;
-  transform: scale(1.02);
-}
-
-.upload-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1rem;
-}
-
-.upload-icon {
-  color: #9ca3af;
-}
-
-.upload-text {
-  font-size: 1.125rem;
-  font-weight: 500;
-  color: #1f2937;
-}
-
-.upload-hint {
-  color: #6b7280;
-  margin-bottom: 1rem;
-}
-
-.file-input {
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  top: 0;
-  left: 0;
-  opacity: 0;
-  cursor: pointer;
-}
-
-.upload-btn {
-  padding: 0.5rem 1rem;
-  border-radius: 0.375rem;
-  font-weight: 500;
-  cursor: pointer;
-  border: none;
-  transition: all 0.2s;
-}
-
-.upload-btn.primary {
-  background-color: #3b82f6;
-  color: white;
-}
-
-.upload-btn.primary:hover {
-  background-color: #2563eb;
-}
-
 .error-message {
-  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
   padding: 0.5rem;
   background-color: #fee2e2;
   color: #dc2626;
   border-radius: 0.375rem;
   font-size: 0.875rem;
-}
-
-.selected-files {
-  margin-top: 1.5rem;
-}
-
-.files-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1rem;
-}
-
-.files-header h3 {
-  font-size: 1.125rem;
-  font-weight: 500;
-  color: #1f2937;
-}
-
-.btn-remove-all {
-  color: #dc2626;
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: 0.875rem;
-  padding: 0.25rem 0.5rem;
-  border-radius: 0.25rem;
-}
-
-.btn-remove-all:hover {
-  background-color: #fee2e2;
 }
 
 .files-grid {
@@ -413,8 +295,10 @@ const removeAllFiles = () => {
   background-color: rgba(255, 255, 255, 0.8);
   border: none;
   border-radius: 50%;
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -427,13 +311,69 @@ const removeAllFiles = () => {
   color: white;
 }
 
+/* 上传卡片 */
+.upload-card {
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.upload-card:hover {
+  border-color: #3b82f6;
+  background-color: #f0f7ff;
+}
+
+.upload-card.drag-over {
+  border-color: #3b82f6;
+  background-color: #dbeafe;
+  border-style: dashed;
+}
+
+.upload-card-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: 100%;
+  min-height: 160px;
+  color: #9ca3af;
+  padding: 1rem;
+}
+
+.upload-card-text {
+  font-size: 0.8rem;
+  font-weight: 500;
+  text-align: center;
+}
+
+.file-input {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
 @media (max-width: 640px) {
+  .remove-btn {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    min-height: 32px;
+  }
+
   .files-grid {
-    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
   }
 
   .file-preview {
-    height: 100px;
+    height: 80px;
+  }
+
+  .upload-card-content {
+    min-height: 120px;
   }
 }
 </style>
