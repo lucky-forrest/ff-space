@@ -10,7 +10,8 @@ export interface MusicSuggestion {
   id: string;
   name: string;
   artist?: string;
-  audioUrl?: string;
+  audioUrl?: string;       // 旧版网易云音频直链（兼容保留）
+  videoId?: string;         // YouTube 视频 ID，用于内嵌播放
   startTime: number;
   endTime: number;
   coverUrl?: string;

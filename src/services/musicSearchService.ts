@@ -1,66 +1,51 @@
 import type { MusicSuggestion } from '@/types/music';
 
-const API_BASE = import.meta.env.VITE_MUSIC_API_BASE as string;
+const API_KEY = import.meta.env.VITE_YOUTUBE_API_KEY as string | undefined;
 const SEARCH_TIMEOUT_MS = 8000;
 
-interface NeteaseSearchResult {
-  id: number;
-  name: string;
-  artists: Array<{ name: string }>;
-  album: { picUrl?: string };
-  duration: number;
-}
-
-interface NeteaseSongUrlResult {
-  data: Array<{ url?: string }>;
+interface YouTubeSearchResult {
+  videoId: string;
+  channelTitle: string;
+  thumbnailUrl: string;
 }
 
 /**
- * 搜索单首歌曲，返回可播放的音频信息
- * 流程: /search?keywords=xxx&limit=1 → 取 song.id → /song/url?id=xxx
- * 任一环节失败返回 null（优雅降级）
+ * 通过 YouTube Data API v3 搜索单首歌曲
+ * 返回 videoId、频道名、缩略图；搜索失败返回 null
  */
-async function searchSong(keyword: string): Promise<{
-  name: string;
-  artist: string;
-  audioUrl: string;
-  coverUrl: string;
-  duration: number;
-} | null> {
-  if (!API_BASE) return null;
+async function searchYouTubeSong(keyword: string): Promise<YouTubeSearchResult | null> {
+  if (!API_KEY) return null;
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), SEARCH_TIMEOUT_MS);
 
   try {
-    // 步骤1：搜索歌曲
-    const searchUrl = `${API_BASE}/search?keywords=${encodeURIComponent(keyword)}&limit=1&type=1`;
-    const searchRes = await fetch(searchUrl, { signal: controller.signal });
+    const query = `${keyword} official audio`;
+    const url = new URL('https://www.googleapis.com/youtube/v3/search');
+    url.searchParams.set('part', 'snippet');
+    url.searchParams.set('q', query);
+    url.searchParams.set('type', 'video');
+    url.searchParams.set('videoCategoryId', '10');
+    url.searchParams.set('maxResults', '1');
+    url.searchParams.set('key', API_KEY);
 
-    if (!searchRes.ok) return null;
+    const res = await fetch(url.toString(), { signal: controller.signal });
+    if (!res.ok) return null;
 
-    const searchData = await searchRes.json() as { result?: { songs?: NeteaseSearchResult[] } };
-    const songs = searchData.result?.songs;
-    if (!songs || songs.length === 0) return null;
+    const data = await res.json() as {
+      items?: Array<{
+        id: { videoId: string };
+        snippet: { channelTitle: string; thumbnails: { high: { url: string } } };
+      }>;
+    };
 
-    const song = songs[0];
-
-    // 步骤2：获取播放 URL
-    const urlRes = await fetch(`${API_BASE}/song/url?id=${song.id}`, { signal: controller.signal });
-
-    if (!urlRes.ok) return null;
-
-    const urlData = await urlRes.json() as NeteaseSongUrlResult;
-    const audioUrl = urlData.data?.[0]?.url;
-
-    if (!audioUrl) return null;
+    const item = data.items?.[0];
+    if (!item?.id?.videoId) return null;
 
     return {
-      name: song.name,
-      artist: song.artists?.map(a => a.name).join(' / ') || '未知歌手',
-      audioUrl: audioUrl,
-      coverUrl: song.album?.picUrl || '',
-      duration: song.duration,
+      videoId: item.id.videoId,
+      channelTitle: item.snippet.channelTitle,
+      thumbnailUrl: item.snippet.thumbnails.high.url,
     };
   } catch {
     return null;
@@ -71,13 +56,13 @@ async function searchSong(keyword: string): Promise<{
 
 /**
  * 批量搜索并填充 musicSuggestions
- * 使用 Promise.allSettled 保证单条失败不影响其他
- * API_BASE 为空时直接返回未填充的数据
+ * Promise.allSettled 保证单条失败不影响其他
+ * API Key 为空时直接返回未填充的数据
  */
 export async function enrichMusicSuggestions(
   suggestions: Array<{ name: string; startTime: number; endTime: number }>
 ): Promise<MusicSuggestion[]> {
-  if (!API_BASE) {
+  if (!API_KEY) {
     return suggestions.map(s => ({
       id: crypto.randomUUID(),
       name: s.name,
@@ -86,7 +71,7 @@ export async function enrichMusicSuggestions(
     }));
   }
 
-  const results = await Promise.allSettled(suggestions.map(s => searchSong(s.name)));
+  const results = await Promise.allSettled(suggestions.map(s => searchYouTubeSong(s.name)));
 
   return suggestions.map((s, i) => {
     const result = results[i];
@@ -94,11 +79,11 @@ export async function enrichMusicSuggestions(
       return {
         id: crypto.randomUUID(),
         name: s.name,
-        artist: result.value.artist,
-        audioUrl: result.value.audioUrl,
+        artist: result.value.channelTitle,
+        videoId: result.value.videoId,
+        coverUrl: result.value.thumbnailUrl,
         startTime: s.startTime,
         endTime: s.endTime,
-        coverUrl: result.value.coverUrl,
       };
     }
     return {
@@ -110,17 +95,7 @@ export async function enrichMusicSuggestions(
   });
 }
 
-/** 检查 API 是否可连通 */
-export async function isMusicApiAvailable(): Promise<boolean> {
-  if (!API_BASE) return false;
-
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3000);
-    const res = await fetch(`${API_BASE}/search?keywords=test&limit=1`, { signal: controller.signal });
-    clearTimeout(timeoutId);
-    return res.ok;
-  } catch {
-    return false;
-  }
+/** 检查 API 是否可用 */
+export function isMusicApiAvailable(): boolean {
+  return !!API_KEY;
 }

@@ -1,19 +1,25 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onUnmounted } from 'vue';
 import type { MusicSuggestion } from '@/types/music';
 
 const props = defineProps<{ music: MusicSuggestion }>();
 
 const isPlaying = ref(false);
-const audioRef = ref<HTMLAudioElement | null>(null);
+const iframeKey = ref(0);
+const showIframe = ref(false);
 const coverLoadError = ref(false);
-const audioLoadError = ref(false);
 
-const hasAudioUrl = computed(() => !!props.music.audioUrl && !audioLoadError.value);
+const hasPlayable = computed(() => !!(props.music.videoId || props.music.audioUrl));
 
 const timeRangeLabel = computed(() =>
   `${formatTime(props.music.startTime)} - ${formatTime(props.music.endTime)}`
 );
+
+/** 封面图：优先 YouTube 缩略图，其次 music.coverUrl */
+const displayCover = computed(() => {
+  if (props.music.videoId) return `https://img.youtube.com/vi/${props.music.videoId}/hqdefault.jpg`;
+  return props.music.coverUrl;
+});
 
 function formatTime(s: number): string {
   const sec = Math.max(0, Math.floor(s));
@@ -22,48 +28,71 @@ function formatTime(s: number): string {
   return `${min}:${String(remain).padStart(2, '0')}`;
 }
 
-async function togglePlay() {
-  if (!audioRef.value) return;
-
+function togglePlay() {
   if (isPlaying.value) {
-    audioRef.value.pause();
-    isPlaying.value = false;
+    stopPlayback();
     return;
   }
+  startPlayback();
+}
 
-  try {
-    audioRef.value.currentTime = props.music.startTime;
-    await audioRef.value.play();
+function startPlayback() {
+  if (props.music.videoId) {
+    // 通过 :key 强制重建 iframe，确保 start/end 参数生效
+    iframeKey.value++;
+    showIframe.value = true;
     isPlaying.value = true;
-  } catch {
-    audioLoadError.value = true;
+  } else if (props.music.audioUrl) {
+    // 旧版 audio 兼容
+    const audio = new Audio(props.music.audioUrl);
+    audio.currentTime = props.music.startTime;
+    audio.play().catch(() => {});
+    audio.addEventListener('timeupdate', () => {
+      if (audio.currentTime >= props.music.endTime) {
+        audio.pause();
+        isPlaying.value = false;
+      }
+    });
+    audio.addEventListener('ended', () => { isPlaying.value = false; });
+    isPlaying.value = true;
   }
 }
 
-function onTimeUpdate() {
-  if (audioRef.value && audioRef.value.currentTime >= props.music.endTime) {
-    audioRef.value.pause();
-    isPlaying.value = false;
+function stopPlayback() {
+  if (props.music.videoId) {
+    showIframe.value = false;
   }
-}
-
-function onAudioEnded() {
   isPlaying.value = false;
 }
 
-function onAudioError() {
-  audioLoadError.value = true;
-  isPlaying.value = false;
-}
-
-async function copyAudioUrl() {
-  if (!props.music.audioUrl) return;
+/** 监听 YouTube iframe 的 postMessage，检测播放结束 */
+function onWindowMessage(event: MessageEvent) {
+  if (!event.source) return;
   try {
-    await navigator.clipboard.writeText(props.music.audioUrl);
+    const data = JSON.parse(event.data as string);
+    // YT.PlayerState.ENDED === 0
+    if (data.event === 'infoDelivery' && data.info?.playerState === 0) {
+      isPlaying.value = false;
+    }
+  } catch { /* 忽略非 JSON 消息 */ }
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('message', onWindowMessage);
+}
+
+onUnmounted(() => {
+  window.removeEventListener('message', onWindowMessage);
+});
+
+async function copyYouTubeLink() {
+  if (!props.music.videoId) return;
+  const link = `https://youtu.be/${props.music.videoId}?t=${Math.floor(props.music.startTime)}`;
+  try {
+    await navigator.clipboard.writeText(link);
   } catch {
-    // fallback
     const input = document.createElement('input');
-    input.value = props.music.audioUrl;
+    input.value = link;
     document.body.appendChild(input);
     input.select();
     document.execCommand('copy');
@@ -73,12 +102,12 @@ async function copyAudioUrl() {
 </script>
 
 <template>
-  <div class="music-player" :class="{ 'no-url': !hasAudioUrl }">
+  <div class="music-player" :class="{ 'has-media': hasPlayable }">
     <!-- 封面 -->
     <div class="music-cover">
       <img
-        v-if="music.coverUrl && !coverLoadError"
-        :src="music.coverUrl"
+        v-if="displayCover && !coverLoadError"
+        :src="displayCover"
         class="cover-img"
         @error="coverLoadError = true"
       />
@@ -95,7 +124,7 @@ async function copyAudioUrl() {
     <!-- 操作 -->
     <div class="music-actions">
       <button
-        v-if="hasAudioUrl"
+        v-if="hasPlayable"
         class="btn-play"
         :title="isPlaying ? '暂停' : '播放'"
         @click="togglePlay"
@@ -103,26 +132,25 @@ async function copyAudioUrl() {
         {{ isPlaying ? '⏸' : '▶️' }}
       </button>
       <button
-        v-if="hasAudioUrl"
+        v-if="music.videoId"
         class="btn-copy-url"
-        title="复制音频链接"
-        @click="copyAudioUrl"
+        title="复制 YouTube 链接"
+        @click="copyYouTubeLink"
       >
         📋
       </button>
-      <span v-else class="no-audio-hint">暂无试听</span>
+      <span v-if="!hasPlayable" class="no-audio-hint">暂无试听</span>
     </div>
 
-    <!-- 隐藏音频元素 -->
-    <audio
-      v-if="hasAudioUrl"
-      ref="audioRef"
-      :src="music.audioUrl"
-      preload="none"
-      @timeupdate="onTimeUpdate"
-      @ended="onAudioEnded"
-      @error="onAudioError"
-    />
+    <!-- YouTube 隐藏 iframe -->
+    <div v-if="showIframe && music.videoId" class="yt-hidden-wrapper">
+      <iframe
+        :key="iframeKey"
+        :src="`https://www.youtube.com/embed/${music.videoId}?start=${Math.floor(music.startTime)}&end=${Math.floor(music.endTime)}&autoplay=1&enablejsapi=1&controls=0&modestbranding=1&rel=0`"
+        allow="autoplay; encrypted-media"
+        class="yt-hidden-iframe"
+      />
+    </div>
   </div>
 </template>
 
@@ -138,7 +166,7 @@ async function copyAudioUrl() {
   transition: border-color 0.15s;
 }
 
-.music-player.no-url {
+.music-player:not(.has-media) {
   opacity: 0.55;
   background: #f9fafb;
   border-color: #e5e7eb;
@@ -234,5 +262,20 @@ async function copyAudioUrl() {
 .no-audio-hint {
   font-size: 0.7rem;
   color: #9ca3af;
+}
+
+.yt-hidden-wrapper {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.yt-hidden-iframe {
+  width: 0;
+  height: 0;
+  border: none;
 }
 </style>
