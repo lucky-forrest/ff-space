@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s \"https://api.github.com/repos/Binaryify/NeteaseCloudMusicApi\")",
+      "Bash(curl -s \"https://api.github.com/repos/Binaryify/NeteaseCloudMusicApi/git/trees/master?recursive=1\")",
+      "WebSearch",
+      "Bash(curl -s \"https://api.github.com/repos/Binaryify/NeteaseCloudMusicApi/forks?sort=stargazers&per_page=5\")",
+      "Bash(python3 *)",
+      "Bash(npm run *)",
+      "Bash(npx cap *)"
+    ]
+  }
+}
