@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">sjl-space</string>
-    <string name="title_activity_main">sjl-space</string>
+    <string name="app_name">FF文案助手</string>
+    <string name="title_activity_main">FF文案助手</string>
     <string name="package_name">com.sjl.space</string>
     <string name="custom_url_scheme">com.sjl.space</string>
 </resources>

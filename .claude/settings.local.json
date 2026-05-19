@@ -7,7 +7,20 @@
       "Bash(curl -s \"https://api.github.com/repos/Binaryify/NeteaseCloudMusicApi/forks?sort=stargazers&per_page=5\")",
       "Bash(python3 *)",
       "Bash(npm run *)",
-      "Bash(npx cap *)"
+      "Bash(npx cap *)",
+      "Bash(export JAVA_HOME=\"C:/Program Files/Android/Android Studio/jbr\")",
+      "Bash(./gradlew assembleRelease)",
+      "Bash(./gradlew assembleDebug)",
+      "Bash(java *)",
+      "Read(//c/Program Files/Java/**)",
+      "Read(//c/Program Files \\(x86\\)/**)",
+      "Bash(C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\\\\bin\\\\java *)",
+      "Bash(export JAVA_HOME=\"C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\")",
+      "Bash(keytool -genkey -v -keystore ff-space.keystore -alias ff-space -keyalg RSA -keysize 2048 -validity 10000 -storepass ffspace123 -keypass ffspace123 -dname \"CN=ff-space, OU=dev, O=sjl, L=Unknown, ST=Unknown, C=CN\")",
+      "Bash(C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\\\\bin\\\\keytool *)",
+      "Bash(where java *)",
+      "Read(//c/Program Files/**)",
+      "Bash(export PATH=\"$JAVA_HOME/bin:$PATH\")"
     ]
   }
 }

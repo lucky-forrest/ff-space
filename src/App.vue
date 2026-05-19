@@ -367,14 +367,17 @@ html, body, #app {
   color: #dc2626;
   font-size: 0.75rem;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.5rem;
-  flex-shrink: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .error-inline p {
   flex: 1;
   margin: 0;
+  min-width: 0;
+  word-break: break-word;
 }
 
 .error-hint {
