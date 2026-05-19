@@ -2,6 +2,7 @@ import type { MediaFile } from '@/components/MediaUploader.vue';
 import type { MusicSuggestion } from '@/types/music';
 import { extractKeyFrames } from '@/services/videoFrameExtractor';
 import { enrichMusicSuggestions } from '@/services/musicSearchService';
+import { useSettings } from '@/composables/useSettings';
 
 export interface CopyResult {
   id: string;
@@ -49,8 +50,8 @@ export class AICopyError extends Error {
   }
 }
 
-const API_BASE = import.meta.env.VITE_API_PROXY_URL || 'https://dashscope.aliyuncs.com';
-const API_MODEL = import.meta.env.VITE_API_MODEL || 'deepseek-v4-pro';
+const DEFAULT_API_BASE = 'https://dashscope.aliyuncs.com';
+const DEFAULT_API_MODEL = 'deepseek-v4-pro';
 
 const ANALYSIS_SYSTEM_PROMPT = `你是一位专业的图片分析专家，擅长从图片中提取关键视觉信息。请分析上传的图片，返回以下信息（JSON 格式）：
 {
@@ -161,11 +162,19 @@ export class AICopyService {
   }
 
   private getApiKey(): string | null {
-    return import.meta.env.VITE_DASHSCOPE_API_KEY || null;
+    const { settings } = useSettings()
+    return settings.value.apiKey || null;
   }
 
   private getApiUrl(): string {
-    return `${API_BASE}/v1/chat/completions`;
+    const { settings } = useSettings()
+    const base = settings.value.apiProxyUrl || DEFAULT_API_BASE
+    return `${base}/v1/chat/completions`;
+  }
+
+  private getApiModel(): string {
+    const { settings } = useSettings()
+    return settings.value.apiModel || DEFAULT_API_MODEL
   }
 
   /**
@@ -195,7 +204,7 @@ export class AICopyService {
     if (!apiKey) {
       throw new AICopyError(
         'API_KEY_NOT_CONFIGURED',
-        '未配置 DashScope API Key。请复制 .env.example 为 .env.local 并填入 VITE_DASHSCOPE_API_KEY。'
+        '未配置 DashScope API Key。请点击右上角设置按钮进行配置。'
       );
     }
 
@@ -219,7 +228,7 @@ export class AICopyService {
           'Authorization': `Bearer ${apiKey}`
         },
         body: JSON.stringify({
-          model: API_MODEL,
+          model: this.getApiModel(),
           max_tokens: maxTokens,
           messages
         })
