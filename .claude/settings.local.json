@@ -21,7 +21,18 @@
       "Bash(where java *)",
       "Read(//c/Program Files/**)",
       "Bash(export PATH=\"$JAVA_HOME/bin:$PATH\")",
-      "Bash(npx vue-tsc *)"
+      "Bash(npx vue-tsc *)",
+      "Bash(./android/gradlew assembleDebug *)",
+      "Bash(cmd /c \"gradlew.bat assembleDebug\")",
+      "Bash(./gradlew.bat assembleDebug *)",
+      "Bash(cmd /c \"echo %JAVA_HOME%\")",
+      "Bash(dir \"C:\\\\Program Files\\\\Android\")",
+      "Bash(dir \"C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\")",
+      "Bash(cmd /c \"where java\")",
+      "Bash(cmd /c \"java -version\")",
+      "Bash(C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\\\\bin\\\\java.exe *)",
+      "Bash(cmd *)",
+      "Bash(cmd.exe *)"
     ]
   }
 }

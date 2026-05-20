@@ -94,6 +94,10 @@ const handleStyleSelected = (styleId: string) => {
   selectedStyleId.value = styleId;
 };
 
+const getStyleId = (styleName: string): string => {
+  return aiService.getStyles().find(s => s.name === styleName)?.id ?? '';
+};
+
 const handleCopyUpdated = (updatedCopy: CopyResult) => {
   const index = generatedCopies.value.findIndex(c => c.id === updatedCopy.id);
   if (index !== -1) {
@@ -176,26 +180,27 @@ const handleCopyCopied = (copy: CopyResult) => {
           <div class="style-tabs">
             <div class="style-tabs-inner">
               <div class="style-tab-row">
-                <button
+                <div
                   v-for="(copy, index) in generatedCopies"
                   :key="copy.id"
-                  :class="['style-tab', { active: copy.style === selectedStyleId || (!selectedStyleId && index === 0) }]"
-                  @click="selectedStyleId = copy.style"
+                  class="style-group"
                 >
-                  {{ copy.style }}
-                </button>
-              </div>
-              <div class="regenerate-row">
-                <button
-                  v-for="style in aiService.getStyles()"
-                  :key="style.id"
-                  class="regenerate-mini"
-                  @click="regenerateStyle(style.id)"
-                  :disabled="isLoading"
-                  title="重新生成"
-                >
-                  🔄 {{ style.name }}
-                </button>
+                  <button
+                    :class="['style-tab', { active: copy.style === selectedStyleId || (!selectedStyleId && index === 0) }]"
+                    @click="selectedStyleId = copy.style"
+                  >
+                    {{ copy.style }}
+                  </button>
+                  <button
+                    v-if="copy.style === selectedStyleId || (!selectedStyleId && index === 0)"
+                    class="regenerate-icon-btn"
+                    @click="regenerateStyle(getStyleId(copy.style))"
+                    :disabled="isLoading"
+                    title="重新生成"
+                  >
+                    ✨
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -477,8 +482,16 @@ html, body, #app {
 
 .style-tab-row {
   display: inline-flex;
-  gap: 0.375rem;
+  gap: 0.5rem;
   white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.style-group {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0;
   flex-shrink: 0;
 }
 
@@ -495,42 +508,40 @@ html, body, #app {
   flex-shrink: 0;
 }
 
-.style-tab:hover {
-  background: #f3f4f6;
-}
-
 .style-tab.active {
   background: #667eea;
   color: white;
   border-color: #667eea;
+  border-radius: 9999px 0 0 9999px;
 }
 
-.regenerate-row {
-  display: inline-flex;
-  gap: 0.375rem;
-  flex-shrink: 0;
-  white-space: nowrap;
-}
-
-.regenerate-mini {
-  padding: 0.25rem 0.5rem;
-  border: 1px solid #e5e7eb;
-  border-radius: 0.25rem;
-  background: white;
-  color: #6b7280;
-  font-size: 0.7rem;
-  cursor: pointer;
-  transition: all 0.15s;
-  white-space: nowrap;
-  flex-shrink: 0;
-  min-height: 32px;
-}
-
-.regenerate-mini:hover:not(:disabled) {
+.style-tab:hover {
   background: #f3f4f6;
 }
 
-.regenerate-mini:disabled {
+.regenerate-icon-btn {
+  padding: 0.375rem;
+  border: 1px solid #059669;
+  border-left: none;
+  border-radius: 0 9999px 9999px 0;
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: white;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.15s;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  box-sizing: border-box;
+}
+
+.regenerate-icon-btn:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.regenerate-icon-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
