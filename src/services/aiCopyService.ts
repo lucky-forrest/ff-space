@@ -190,7 +190,7 @@ export class AICopyService {
   }
 
   /**
-   * 调用阿里云百炼 API (qwen3.6-plus)
+   * 调用阿里云百炼 API (支持流式 SSE，可选 onChunk 回调用于增量展示)
    */
   private async callDashScopeAPI(
     systemPrompt: string,
@@ -198,7 +198,8 @@ export class AICopyService {
       | { type: 'image_url'; image_url: { url: string } }
       | { type: 'text'; text: string }
     >,
-    maxTokens = 2048
+    maxTokens = 2048,
+    onChunk?: (text: string) => void
   ): Promise<string> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
@@ -230,6 +231,7 @@ export class AICopyService {
         body: JSON.stringify({
           model: this.getApiModel(),
           max_tokens: maxTokens,
+          stream: true,
           messages
         })
       });
@@ -242,8 +244,47 @@ export class AICopyService {
         throw new AICopyError('API_NETWORK_ERROR', `API 请求失败 (${response.status}): ${errorText}`);
       }
 
-      const data = await response.json();
-      return data.choices?.[0]?.message?.content || '';
+      if (!response.body) {
+        throw new AICopyError('API_NETWORK_ERROR', '浏览器不支持流式响应。');
+      }
+
+      // SSE 流式读取
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let fullText = '';
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split('\n\n');
+        buffer = events.pop() || '';
+
+        for (const event of events) {
+          if (!event.trim()) continue;
+          for (const line of event.split('\n')) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data:')) continue;
+            const data = trimmed.slice(5).trim();
+            if (data === '[DONE]') continue;
+
+            try {
+              const parsed = JSON.parse(data);
+              const content = parsed.choices?.[0]?.delta?.content;
+              if (content) {
+                fullText += content;
+                onChunk?.(content);
+              }
+            } catch {
+              // 跳过解析失败的行
+            }
+          }
+        }
+      }
+
+      return fullText;
     } catch (error) {
       if (error instanceof AICopyError) throw error;
       if (error instanceof TypeError && error.message.includes('fetch')) {
@@ -336,7 +377,7 @@ export class AICopyService {
 
     limitedContents.push({ type: 'text', text: textPrompt });
 
-    const response = await this.callDashScopeAPI(ANALYSIS_SYSTEM_PROMPT, limitedContents, 1024);
+    const response = await this.callDashScopeAPI(ANALYSIS_SYSTEM_PROMPT, limitedContents, 512);
     const parsed = this.parseJsonResponse(response);
 
     return {
@@ -429,11 +470,13 @@ ${styleInstruction}`;
   }
 
   /**
-   * 生成文案（支持多文件、多风格）
+   * 生成文案（支持多文件、多风格，进度式返回结果）
+   * @param onStyleReady 每个风格生成完毕后立即回调，不等音乐搜索
    */
   async generateCopy(
     files: MediaFile[],
-    selectedStyleIds?: string[]
+    selectedStyleIds?: string[],
+    onStyleReady?: (result: CopyResult) => void
   ): Promise<CopyResult[]> {
     if (files.length === 0) {
       throw new Error('至少需要上传一个文件');
@@ -445,26 +488,39 @@ ${styleInstruction}`;
       ? this.copyStyles.filter(style => selectedStyleIds.includes(style.id))
       : this.copyStyles;
 
-    const results = await Promise.all(
-      stylesToUse.map(async (style) => {
-        const copy = await this.generateCopyWithClaude(analysis, style);
+    // 并行生成所有风格文案，每个完成立即回调
+    const promises = stylesToUse.map(async (style) => {
+      const copy = await this.generateCopyWithClaude(analysis, style);
+      const result: CopyResult = {
+        ...copy,
+        id: Math.random().toString(36).substring(2, 11),
+        createdAt: new Date()
+      };
+      onStyleReady?.(result);
+      return result;
+    });
 
-        // 异步搜索填充音乐URL（失败不影响文案生成）
+    const results = await Promise.all(promises);
+
+    // 异步填充音乐URL（不阻塞结果返回）
+    this.enrichMusicAsync(results);
+
+    return results;
+  }
+
+  /**
+   * 异步填充音乐信息（后台执行，失败不影响已展示的文案）
+   */
+  private enrichMusicAsync(results: CopyResult[]): void {
+    Promise.allSettled(
+      results.map(async (copy) => {
         try {
           copy.musicSuggestions = await enrichMusicSuggestions(copy.musicSuggestions);
         } catch {
-          console.warn('音乐搜索填充失败，将使用纯文本推荐');
+          console.warn(`音乐搜索填充失败 (${copy.style})，将使用纯文本推荐`);
         }
-
-        return {
-          ...copy,
-          id: Math.random().toString(36).substring(2, 11),
-          createdAt: new Date()
-        };
       })
     );
-
-    return results;
   }
 
   /**

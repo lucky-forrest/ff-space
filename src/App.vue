@@ -43,10 +43,11 @@ const generateCopyForFiles = async () => {
       ? '正在提取视频关键帧...'
       : '正在分析内容...';
 
-    loadingStep.value = '正在生成文案...';
+    await aiService.generateCopy(mediaFiles.value, undefined, (result) => {
+      generatedCopies.value = [...generatedCopies.value, result];
+      loadingStep.value = `已生成 ${generatedCopies.value.length} 种风格...`;
+    });
 
-    const results = await aiService.generateCopy(mediaFiles.value);
-    generatedCopies.value = results;
     loadingStep.value = '';
   } catch (error) {
     const aiError = error as AICopyError;
@@ -65,10 +66,8 @@ const regenerateStyle = async (styleId: string) => {
   loadingStep.value = '正在生成文案...';
 
   try {
-    const results = await aiService.generateCopy(mediaFiles.value, [styleId]);
-
-    const updatedCopies = [...generatedCopies.value];
-    for (const newCopy of results) {
+    await aiService.generateCopy(mediaFiles.value, [styleId], (newCopy) => {
+      const updatedCopies = [...generatedCopies.value];
       const existingIndex = updatedCopies.findIndex(
         (c: CopyResult) => c.style === newCopy.style
       );
@@ -77,9 +76,9 @@ const regenerateStyle = async (styleId: string) => {
       } else {
         updatedCopies.push(newCopy);
       }
-    }
+      generatedCopies.value = updatedCopies;
+    });
 
-    generatedCopies.value = updatedCopies;
     loadingStep.value = '';
   } catch (error) {
     const aiError = error as AICopyError;
@@ -515,8 +514,12 @@ html, body, #app {
   border-radius: 9999px 0 0 9999px;
 }
 
-.style-tab:hover {
+.style-tab:hover:not(.active) {
   background: #f3f4f6;
+}
+
+.style-tab.active:hover {
+  background: #5a6fd6;
 }
 
 .regenerate-icon-btn {
