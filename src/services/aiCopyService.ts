@@ -1,3 +1,36 @@
+/**
+ * AI 文案生成服务
+ *
+ * DeerFlow 集成说明：
+ * 本服务支持两种 AI 调用模式，通过环境变量 VITE_USE_DEERFLOW 切换：
+ *
+ * 1. DashScope 直连模式（VITE_USE_DEERFLOW 未设置或为 false）
+ *    浏览器直接调用 DashScope API，单轮 LLM 对话生成文案。
+ *    优点：简单直接，无需后端。
+ *    缺点：无法利用多智能体、搜索、记忆等高级能力。
+ *
+ * 2. DeerFlow 后端模式（VITE_USE_DEERFLOW=true）
+ *    浏览器调用本地 DeerFlow 后端（FastAPI + LangGraph），
+ *    后端通过 StateGraph 编排多个 Agent 协作：
+ *    - Analyze Agent：分析图片内容
+ *    - Copy Agent：生成文案
+ *    优点：可扩展（加入 Researcher/Planner/Coder 等 Agent），
+ *          支持沙箱执行、记忆系统、工具调用等 DeerFlow 核心能力。
+ *    缺点：需要额外部署 Python 后端。
+ *
+ * DeerFlow 核心概念（后端部分见 backend/ 目录）：
+ * - StateGraph：工作流编排器，定义 Agent 之间的执行顺序和数据传递
+ * - Agent：独立的智能体节点，每个 Agent 有独立的 System Prompt 和工具
+ * - State：节点间传递的状态（TypedDict），每个节点读取和更新状态
+ * - Edge：定义节点之间的连接关系，支持条件分支
+ *
+ * 学习 DeerFlow 的建议顺序：
+ * 1. 阅读 backend/src/workflow/copywriter.py 理解 StateGraph 和 Agent
+ * 2. 阅读 backend/main.py 理解 FastAPI 如何暴露 API 端点
+ * 3. 阅读本文件中 callDeerFlowAPI 方法理解前端如何调用后端
+ * 4. 尝试添加新的 Agent（如 Researcher 搜索实时趋势）
+ */
+
 import type { MediaFile } from '@/components/MediaUploader.vue';
 import type { MusicSuggestion } from '@/types/music';
 import { extractKeyFrames } from '@/services/videoFrameExtractor';
@@ -52,6 +85,7 @@ export class AICopyError extends Error {
 
 const DEFAULT_API_BASE = 'https://dashscope.aliyuncs.com';
 const DEFAULT_API_MODEL = 'deepseek-v4-pro';
+const DEFAULT_DEERFLOW_URL = 'http://localhost:8000';
 
 const ANALYSIS_SYSTEM_PROMPT = `你是一位专业的图片分析专家，擅长从图片中提取关键视觉信息。请分析上传的图片，返回以下信息（JSON 格式）：
 {
@@ -102,48 +136,48 @@ export class AICopyService {
       description: '触动用户内心深处',
       sample: '看完真的破防了😭 #情感故事 #人生感悟'
     },
-    {
-      id: 'humorous',
-      name: '幽默搞笑',
-      description: '轻松有趣，娱乐性强',
-      sample: '笑死我了😂 #搞笑日常 #欢乐时刻'
-    },
-    {
-      id: 'knowledge',
-      name: '知识分享',
-      description: '提供实用信息价值',
-      sample: '学到了！收藏备用 📚 #涨知识 #实用技巧'
-    },
-    {
-      id: 'inspirational',
-      name: '励志鼓舞',
-      description: '激励人心，正能量',
-      sample: '太励志了！加油 💪 #正能量 #励志语录'
-    },
-    {
-      id: 'graceful',
-      name: '婉约朦胧',
-      description: '含蓄留白，古典诗意，以景结情',
-      sample: '此情无计可消除，才下眉头，却上心头 🍂 #古风意境 #温柔文案'
-    },
-    {
-      id: 'fresh',
-      name: '小清新',
-      description: '自然治愈，文艺干净',
-      sample: '阳光正好，微风不燥，一切刚刚好 🌿 #治愈系 #小清新'
-    },
-    {
-      id: 'bold',
-      name: '豪放派',
-      description: '气势磅礴，豪迈洒脱',
-      sample: '仰天大笑出门去，我辈岂是蓬蒿人 ⚡ #豪迈 #江湖气'
-    },
-    {
-      id: 'daily',
-      name: '日常碎碎念',
-      description: '烟火气、vlog感，像朋友闲聊',
-      sample: '今天也是被生活治愈的一天呀 ☕ #日常 #生活碎片'
-    },
+    // {
+    //   id: 'humorous',
+    //   name: '幽默搞笑',
+    //   description: '轻松有趣，娱乐性强',
+    //   sample: '笑死我了😂 #搞笑日常 #欢乐时刻'
+    // },
+    // {
+    //   id: 'knowledge',
+    //   name: '知识分享',
+    //   description: '提供实用信息价值',
+    //   sample: '学到了！收藏备用 📚 #涨知识 #实用技巧'
+    // },
+    // {
+    //   id: 'inspirational',
+    //   name: '励志鼓舞',
+    //   description: '激励人心，正能量',
+    //   sample: '太励志了！加油 💪 #正能量 #励志语录'
+    // },
+    // {
+    //   id: 'graceful',
+    //   name: '婉约朦胧',
+    //   description: '含蓄留白，古典诗意，以景结情',
+    //   sample: '此情无计可消除，才下眉头，却上心头 🍂 #古风意境 #温柔文案'
+    // },
+    // {
+    //   id: 'fresh',
+    //   name: '小清新',
+    //   description: '自然治愈，文艺干净',
+    //   sample: '阳光正好，微风不燥，一切刚刚好 🌿 #治愈系 #小清新'
+    // },
+    // {
+    //   id: 'bold',
+    //   name: '豪放派',
+    //   description: '气势磅礴，豪迈洒脱',
+    //   sample: '仰天大笑出门去，我辈岂是蓬蒿人 ⚡ #豪迈 #江湖气'
+    // },
+    // {
+    //   id: 'daily',
+    //   name: '日常碎碎念',
+    //   description: '烟火气、vlog感，像朋友闲聊',
+    //   sample: '今天也是被生活治愈的一天呀 ☕ #日常 #生活碎片'
+    // },
     {
       id: 'emo',
       name: '孤独丧',
@@ -170,6 +204,99 @@ export class AICopyService {
     const { settings } = useSettings()
     const base = settings.value.apiProxyUrl || DEFAULT_API_BASE
     return `${base}/v1/chat/completions`;
+  }
+
+  /**
+   * 获取 DeerFlow 后端地址
+   * 可通过 VITE_DEERFLOW_URL 环境变量配置，默认 http://localhost:8000
+   */
+  private getDeerFlowUrl(): string {
+    return import.meta.env.VITE_DEERFLOW_URL || DEFAULT_DEERFLOW_URL;
+  }
+
+  /**
+   * 调用 DeerFlow 后端 API 生成文案（多智能体编排）
+   * DeerFlow 工作流程：
+   * 1. Analyze Agent：分析图片内容（物体、颜色、情感、场景）
+   * 2. Copy Agent：根据分析结果和指定风格生成抖音文案
+   * 返回格式与原有 DashScope 调用保持一致，实现无缝切换
+   *
+   * @param images base64 图片数组
+   * @param style 文案风格
+   * @param analysis 已有的图片分析结果（可选，跳过 Analyze 阶段）
+   */
+  private async callDeerFlowAPI(
+    images: string[],
+    style: CopyStyle,
+    analysis?: ImageAnalysisResult
+  ): Promise<string> {
+    const response = await fetch(`${this.getDeerFlowUrl()}/api/generate-copy`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        images,
+        style_id: style.id,
+        style_name: style.name,
+        style_description: style.description,
+        analysis: analysis ? {
+          objects: analysis.objects,
+          colors: analysis.colors,
+          mood: analysis.mood,
+          scene: analysis.scene,
+          main_subject: analysis.mainSubject,
+          relationships: analysis.relationships,
+        } : undefined,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new AICopyError(
+        'API_NETWORK_ERROR',
+        `DeerFlow 后端请求失败 (${response.status})。请检查后端服务是否启动。`
+      );
+    }
+
+    if (!response.body) {
+      throw new AICopyError('API_NETWORK_ERROR', '浏览器不支持流式响应。');
+    }
+
+    // SSE 流式读取（与原有 DashScope SSE 格式一致）
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const events = buffer.split('\n\n');
+      buffer = events.pop() || '';
+
+      for (const event of events) {
+        if (!event.trim()) continue;
+        const lines = event.split('\n');
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith('data:')) continue;
+          const data = trimmed.slice(5).trim();
+          if (data === '[DONE]') return data;
+
+          try {
+            const parsed = JSON.parse(data);
+            if (parsed.error) {
+              throw new AICopyError('API_NETWORK_ERROR', parsed.error);
+            }
+            // DeerFlow 返回完整结果，一次性返回
+            return JSON.stringify(parsed);
+          } catch {
+            // 跳过解析失败的行
+          }
+        }
+      }
+    }
+
+    throw new AICopyError('API_NETWORK_ERROR', 'DeerFlow 后端未返回有效数据');
   }
 
   private getApiModel(): string {
@@ -401,11 +528,37 @@ export class AICopyService {
 
   /**
    * 根据分析结果和风格生成文案
+   * 支持两种模式：
+   * 1. DeerFlow 模式：调用后端多智能体工作流（分析 + 生成）
+   * 2. DashScope 模式：直接调用 DashScope API（原有逻辑）
+   * 通过环境变量 VITE_USE_DEERFLOW=true 切换
    */
   private async generateCopyWithClaude(
     analysis: ImageAnalysisResult,
-    style: CopyStyle
+    style: CopyStyle,
+    imageBase64s: string[]
   ): Promise<Omit<CopyResult, 'id' | 'createdAt'>> {
+    // 判断是否使用 DeerFlow 后端
+    const useDeerFlow = import.meta.env.VITE_USE_DEERFLOW === 'true';
+    if (useDeerFlow) {
+      const raw = await this.callDeerFlowAPI(imageBase64s, style, analysis);
+      if (raw === '[DONE]') {
+        throw new AICopyError('API_NETWORK_ERROR', 'DeerFlow 未返回数据');
+      }
+      const parsed = JSON.parse(raw);
+      return {
+        title: typeof parsed.title === 'string' ? parsed.title : '精彩瞬间',
+        content: typeof parsed.content === 'string' ? parsed.content : '值得一看的精彩瞬间',
+        hashtags: Array.isArray(parsed.hashtags) ? parsed.hashtags as string[] : ['#精彩瞬间'],
+        musicSuggestions: this.normalizeMusicSuggestions(parsed.music_suggestions),
+        viralComments: Array.isArray(parsed.viral_comments)
+          ? (parsed.viral_comments as string[]).slice(0, 10)
+          : ['神评生成中...'],
+        style: style.name
+      };
+    }
+
+    // 原有 DashScope 直连模式
     const styleInstruction = `请以「${style.name}」风格生成文案。${style.description}。参考示例：${style.sample}`;
 
     const analysisText = `图片分析结果：
@@ -471,6 +624,14 @@ ${styleInstruction}`;
 
   /**
    * 生成文案（支持多文件、多风格，进度式返回结果）
+   *
+   * DeerFlow 模式（VITE_USE_DEERFLOW=true）：
+   *   图片和风格全部交给 DeerFlow 后端，由 Analyze Agent + Copy Agent 协作完成
+   *   前端不直接调用 DashScope
+   *
+   * DashScope 直连模式：
+   *   前端先调用 analyzeMultipleImages 分析图片，再调用 DashScope 生成文案
+   *
    * @param onStyleReady 每个风格生成完毕后立即回调，不等音乐搜索
    */
   async generateCopy(
@@ -482,7 +643,19 @@ ${styleInstruction}`;
       throw new Error('至少需要上传一个文件');
     }
 
-    const analysis = await this.analyzeMultipleImages(files);
+    const useDeerFlow = import.meta.env.VITE_USE_DEERFLOW === 'true';
+
+    // DeerFlow 模式：不直接分析图片，交给后端 Analyze Agent 处理
+    let analysis: ImageAnalysisResult | undefined;
+    if (!useDeerFlow) {
+      analysis = await this.analyzeMultipleImages(files);
+    }
+
+    // 收集图片 base64（DeerFlow 需要原始图片，DashScope 模式也需要用于展示）
+    const imageBase64s: string[] = [];
+    for (const file of files.filter(f => f.type === 'image')) {
+      imageBase64s.push(await this.base64File(file.file));
+    }
 
     const stylesToUse = selectedStyleIds && selectedStyleIds.length > 0
       ? this.copyStyles.filter(style => selectedStyleIds.includes(style.id))
@@ -490,7 +663,7 @@ ${styleInstruction}`;
 
     // 并行生成所有风格文案，每个完成立即回调
     const promises = stylesToUse.map(async (style) => {
-      const copy = await this.generateCopyWithClaude(analysis, style);
+      const copy = await this.generateCopyWithClaude(analysis!, style, imageBase64s);
       const result: CopyResult = {
         ...copy,
         id: Math.random().toString(36).substring(2, 11),
