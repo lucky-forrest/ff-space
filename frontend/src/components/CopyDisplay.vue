@@ -19,6 +19,7 @@ const emit = defineEmits<{
 const selectedIndex = ref(0);
 const isEditing = ref(false);
 const editedCopy = ref<CopyResult | null>(null);
+const commentTab = ref<'reply' | 'viral'>('reply');
 
 const currentCopy = computed(() => {
   if (props.copies.length === 0) return null;
@@ -45,7 +46,8 @@ const startEditing = () => {
       ...currentCopy.value,
       hashtags: [...currentCopy.value.hashtags],
       musicSuggestions: currentCopy.value.musicSuggestions.map(m => ({ ...m })),
-      viralComments: [...currentCopy.value.viralComments]
+      viralComments: [...currentCopy.value.viralComments],
+      replies: [...currentCopy.value.replies]
     };
     isEditing.value = true;
   }
@@ -55,6 +57,7 @@ const saveEdit = () => {
   if (editedCopy.value) {
     editedCopy.value.musicSuggestions = editedCopy.value.musicSuggestions.map(m => ({ ...m }));
     editedCopy.value.viralComments = [...editedCopy.value.viralComments];
+    editedCopy.value.replies = [...editedCopy.value.replies];
     emit('copyUpdated', { ...editedCopy.value });
     isEditing.value = false;
     editedCopy.value = null;
@@ -116,9 +119,23 @@ const editedViralCommentsText = computed({
   }
 });
 
+const editedRepliesText = computed({
+  get: () => editedCopy.value?.replies.join('\n') ?? '',
+  set: (val: string) => {
+    if (editedCopy.value) {
+      editedCopy.value.replies = val.split('\n').filter(Boolean);
+    }
+  }
+});
+
 const copyViralComment = async (comment: string) => {
   const success = await copyText(comment);
   showToast(success ? '神评已复制' : '复制失败', success ? 'success' : 'error');
+};
+
+const copyReply = async (reply: string) => {
+  const success = await copyText(reply);
+  showToast(success ? '回复已复制' : '复制失败', success ? 'success' : 'error');
 };
 
 const addMusicItem = () => {
@@ -180,21 +197,47 @@ const editedContent = computed({
         </div>
       </div>
 
-      <div class="viral-comments-section">
-        <div class="viral-section-label">🎯 评论区神评</div>
-        <div class="viral-list">
-          <div
-            v-for="(comment, idx) in currentCopy.viralComments"
-            :key="idx"
-            class="viral-item"
-          >
-            <span class="viral-text">{{ comment }}</span>
-            <button class="viral-copy-btn" @click="copyViralComment(comment)" title="复制神评">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0 0 13.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 0 1-.75.75H9a.75.75 0 0 1-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 0 1-2.25 2.25H6.75A2.25 2.25 0 0 1 4.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 0 1 1.927-.184" />
-              </svg>
-            </button>
-          </div>
+      <div class="comment-section">
+        <div class="comment-section-label">💬 评论互动区</div>
+        <div class="comment-tabs">
+          <button
+            :class="['comment-tab', { active: commentTab === 'reply' }]"
+            @click="commentTab = 'reply'"
+          >评论回复</button>
+          <button
+            :class="['comment-tab', { active: commentTab === 'viral' }]"
+            @click="commentTab = 'viral'"
+          >评论区神评</button>
+        </div>
+        <div class="comment-list">
+          <template v-if="commentTab === 'reply'">
+            <div
+              v-for="(reply, idx) in currentCopy.replies"
+              :key="'reply-' + idx"
+              class="comment-item"
+            >
+              <span class="comment-text">{{ reply }}</span>
+              <button class="comment-copy-btn" @click="copyReply(reply)" title="复制回复">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0 0 13.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 0 1-.75.75H9a.75.75 0 0 1-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 0 1-2.25 2.25H6.75A2.25 2.25 0 0 1 4.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 0 1 1.927-.184" />
+                </svg>
+              </button>
+            </div>
+          </template>
+          <template v-else>
+            <div
+              v-for="(comment, idx) in currentCopy.viralComments"
+              :key="'viral-' + idx"
+              class="comment-item"
+            >
+              <span class="comment-text">{{ comment }}</span>
+              <button class="comment-copy-btn" @click="copyViralComment(comment)" title="复制神评">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0 0 13.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 0 1-.75.75H9a.75.75 0 0 1-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 0 1-2.25 2.25H6.75A2.25 2.25 0 0 1 4.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 0 1 1.927-.184" />
+                </svg>
+              </button>
+            </div>
+          </template>
         </div>
       </div>
     </div>
@@ -229,6 +272,10 @@ const editedContent = computed({
           </div>
           <button class="btn-add-music" @click="addMusicItem">+ 添加BGM</button>
         </div>
+      </div>
+      <div class="edit-field">
+        <label>💬 评论回复（每行一条）</label>
+        <textarea v-model="editedRepliesText" class="edit-textarea" rows="5" placeholder="每行一条评论回复..."></textarea>
       </div>
       <div class="edit-field">
         <label>🎯 神评（每行一条）</label>
@@ -337,25 +384,70 @@ const editedContent = computed({
   gap: 0.375rem;
 }
 
-/* 神评区域 */
-.viral-comments-section {
+/* 评论互动区 */
+.comment-section {
   margin-bottom: 0.75rem;
 }
 
-.viral-section-label {
+.comment-section-label {
   font-size: 0.75rem;
   font-weight: 600;
   color: #7c3aed;
   margin-bottom: 0.375rem;
 }
 
-.viral-list {
+.comment-tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 0.375rem;
+}
+
+.comment-tab {
+  flex: 1;
+  padding: 0.3rem 0.75rem;
+  border: 1px solid #e5e7eb;
+  background: #f3f4f6;
+  color: #6b7280;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+
+.comment-tab:first-child {
+  border-radius: 0.375rem 0 0 0.375rem;
+  border-right: none;
+}
+
+.comment-tab:last-child {
+  border-radius: 0 0.375rem 0.375rem 0;
+}
+
+.comment-tab.active {
+  background: #667eea;
+  color: white;
+  border-color: #667eea;
+}
+
+.comment-tab.active:first-child {
+  border-radius: 0.375rem 0 0 0.375rem;
+}
+
+.comment-tab.active:last-child {
+  border-radius: 0 0.375rem 0.375rem 0;
+}
+
+.comment-tab:hover:not(.active) {
+  background: #e5e7eb;
+}
+
+.comment-list {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
 }
 
-.viral-item {
+.comment-item {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -366,18 +458,18 @@ const editedContent = computed({
   transition: border-color 0.15s;
 }
 
-.viral-item:hover {
+.comment-item:hover {
   border-color: #c4b5fd;
 }
 
-.viral-text {
+.comment-text {
   flex: 1;
   font-size: 0.8rem;
   color: #4c1d95;
   line-height: 1.4;
 }
 
-.viral-copy-btn {
+.comment-copy-btn {
   width: 32px;
   height: 32px;
   min-width: 32px;
@@ -394,7 +486,7 @@ const editedContent = computed({
   transition: background 0.15s;
 }
 
-.viral-copy-btn:hover {
+.comment-copy-btn:hover {
   background: #c4b5fd;
 }
 

@@ -84,4 +84,5 @@ class CopyResponse(BaseModel):
     hashtags: list[str]
     music_suggestions: list[MusicSuggestion]
     viral_comments: list[str]
+    replies: list[str]
     style: str

@@ -136,6 +136,28 @@ async def generate_copy(req: CopyRequest):
             return
 
         # 构建标准响应
+        viral_comments_list = parsed.get("viralComments", ["神评生成中..."])[:10]
+        replies_list = parsed.get("replies", [])[:20]
+
+        # LLM 可能未返回 replies，基于神评自动生成回复
+        if not replies_list:
+            reply_templates = [
+                "哈哈，说到心坎里了",
+                "承蒙厚爱，继续加油",
+                "同道中人，一起坚持",
+                "过奖了，还在摸索中",
+                "感谢支持，慢慢来比较稳",
+                "确实如此，深有体会",
+                "被你一说，突然有画面了",
+                "这话说得太到位了",
+                "同感，一起加油",
+                "谢谢鼓励，会继续分享的",
+            ]
+            replies_list = reply_templates[:min(len(viral_comments_list), len(reply_templates))]
+            # 补齐到20条
+            while len(replies_list) < 20:
+                replies_list.append("感谢关注，一起进步")
+
         response = CopyResponse(
             title=parsed.get("title", "精彩瞬间"),
             content=parsed.get("content", "值得一看的精彩瞬间"),
@@ -148,7 +170,8 @@ async def generate_copy(req: CopyRequest):
                 )
                 for i, m in enumerate(parsed.get("musicSuggestions", [])[:3])
             ] or [MusicSuggestion(name="抖音热歌")],
-            viral_comments=parsed.get("viralComments", ["神评生成中..."])[:10],
+            viral_comments=viral_comments_list,
+            replies=replies_list,
             style=req.style_name,
         )
 

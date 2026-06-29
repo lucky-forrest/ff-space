@@ -44,6 +44,7 @@ export interface CopyResult {
   hashtags: string[];
   musicSuggestions: MusicSuggestion[];
   viralComments: string[];
+  replies: string[];
   style: string;
   createdAt: Date;
 }
@@ -554,6 +555,9 @@ export class AICopyService {
         viralComments: Array.isArray(parsed.viral_comments)
           ? (parsed.viral_comments as string[]).slice(0, 10)
           : ['神评生成中...'],
+        replies: Array.isArray(parsed.replies)
+          ? (parsed.replies as string[]).slice(0, 20)
+          : ['回复生成中...'],
         style: style.name
       };
     }
@@ -587,6 +591,9 @@ ${styleInstruction}`;
       viralComments: Array.isArray(parsed.viralComments)
         ? (parsed.viralComments as string[]).slice(0, 10)
         : ['神评生成中...'],
+      replies: Array.isArray(parsed.replies)
+        ? (parsed.replies as string[]).slice(0, 20)
+        : ['回复生成中...'],
       style: style.name
     };
   }

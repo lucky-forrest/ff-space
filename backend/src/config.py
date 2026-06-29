@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     # DashScope 文档：https://help.aliyun.com/zh/model-studio/developer-reference/compatibility-of-openai-with-dashscope
     api_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     api_key: str = ""
-    api_model: str = "qwen-plus"  # 可选：qwen-plus, qwen-max, qwen-turbo 等
+    api_model: str = "qwen-max"  # 可选：qwen-plus, qwen-max, qwen-turbo 等
 
     # FastAPI 服务配置
     host: str = "0.0.0.0"    # 监听地址
